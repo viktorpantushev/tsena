@@ -6,7 +6,7 @@ It integrates cost calculation with the ability to change providers and models o
 
 ## How?
 
-This powerful tool will be able to plan tasks for you, coordinate models while making sure to use small models for speed and large LLMs for the perfect result.
+This powerful tool will be able to plan tasks for you, coordinate models while staying in the budget by using small models for speed and large LLMs for the perfect result.
 No need to sacrifice the abilites large models. Also LLM discussions are here to help with fixing halucinations!   
 
 ## Why should you care?
