@@ -11,7 +11,7 @@ No need to sacrifice the abilites large models have. Also LLM discussions are he
 
 
 ## Why should you care?
-You set the price, tsena mixed the ingredients.
+You have set the price, tsena mixed the ingredients.
 
 With similar properties to a wiz, tsena will change model sizes for
 * a quick read through your code
