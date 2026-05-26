@@ -6,7 +6,7 @@ It integrates a seamless switch between providers and models with the ability to
 
 ## How?
 
-This powerful tool will be able to plan tasks for you, coordinate models while making sure to use small LLM models.
+This powerful tool will be able to plan tasks for you, coordinate models while making sure to use small models for speed and large LLMs for the perfect result.
 No need to sacrifice the abilites large models. Also LLM discussions are here to help with fixing halucinations!   
 
 ## Why should you care?
