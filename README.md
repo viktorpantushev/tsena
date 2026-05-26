@@ -1,4 +1,14 @@
 # tsena - Cost-effective LLM orchestration
+tsena is an LLM orchestration library all about time and tokens. 
 
-tsena is a lightweight, cost‑effective LLM orchestration library that lets you seamlessly switch between different language‑model providers (OpenAI, Anthropic, Cohere, etc.) at runtime.
-It abstracts the model‑selection logic so you can focus on your application while keeping token‑spending under control.
+## Worried about time and cost? tsena is here to help!
+It integrates a seamless switch between providers and models with the ability to set a budget.
+
+## How?
+
+This powerful tool will be able to plan tasks for you, coordinate models while making sure to use small LLM models without sacrificing the abilites the large ones and limit halucinations by enabling LLM discussions.   
+
+## Why should you care?
+You set the price, tsena mixed the ingredients (LLMs).
+So let tsena make the work and save time and money!
+
