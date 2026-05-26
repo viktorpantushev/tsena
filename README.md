@@ -21,5 +21,5 @@ With similar properties to a wiz, tsena will change model sizes for
 * hotswapping LLM models
 * many more cool things
 
-So let tsena get to work and **save time and money**!
+So let tsena get to work and **save your time and money**!
 
