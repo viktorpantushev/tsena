@@ -1,5 +1,5 @@
 # tsena - Cost-effective LLM orchestration
-tsena is an LLM orchestration library all about time and tokens. 
+tsena is an LLM orchestration library all about *time* and *tokens*. 
 
 ## Worried about time and cost? tsena is here to help!
 It integrates a seamless switch between providers and models with the ability to set a budget and save you crucial time.
