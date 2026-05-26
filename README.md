@@ -2,7 +2,7 @@
 tsena is an LLM orchestration library all about saving you **time** and **tokens**.
 
 ## Scared from the LLM token bill? tsena is here to help!
-It integrates cost calculation with the ability to change providers and models on the fly to save you crucial time.
+It integrates cost calculation with the ability to change providers and models on the fly to save you tokens & time.
 
 ## How?
 
