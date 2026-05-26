@@ -1,5 +1,5 @@
 # tsena - Cost-effective LLM orchestration for coding
-tsena is an LLM orchestration library all about **time** and **tokens**. 
+tsena is an LLM orchestration library all about saving you **time** and **tokens**. 
 
 ## Scared from the LLM token bill? tsena is here to help!
 It integrates a seamless switch between providers and models with the ability to set a budget and save you crucial time.
@@ -20,6 +20,4 @@ With similar properties to a wiz, tsena will change model sizes for
 * offering persistance variety for LLM discussions
 * hotswapping LLM models
 * many more cool things
-
-So let tsena get to work and **save your time and money**!
 
