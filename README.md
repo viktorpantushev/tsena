@@ -6,7 +6,8 @@ It integrates a seamless switch between providers and models with the ability to
 
 ## How?
 
-This powerful tool will be able to plan tasks for you, coordinate models while making sure to use small LLM models without sacrificing the abilites the large ones and limit halucinations by enabling LLM discussions.   
+This powerful tool will be able to plan tasks for you, coordinate models while making sure to use small LLM models.
+No need to sacrifice the abilites large models. Also LLM discussions are here to help with fixing halucinations!   
 
 ## Why should you care?
 You set the price, tsena mixed the ingredients.
@@ -15,5 +16,10 @@ With similar properties to a wiz, tsena will change model sizes for
 * well documented discussion on features and security
 * producing a documentation and pseudo code, for increased speed and clarity of coding
 
-So let tsena make the work and save time and money!
+### Other features will include:
+* offering persistance variety for LLM discussions
+* hotswapping LLM models
+* many more cool things
+
+So let tsena get to work and **save time and money**!
 
