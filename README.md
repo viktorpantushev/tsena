@@ -1,26 +1,53 @@
-# tsena - Cost-effective LLM orchestration for coding
-tsena is an LLM orchestration library all about saving you **time** and **tokens**.
+# Tsena
 
-## Scared from the LLM token bill? tsena is here to help!
-It makes use of budget planning and allows switching providers and models on the fly.
+**Cost-effective LLM orchestration for coding** - Save time and tokens!
 
+## Quick Start
 
-## How?
-This powerful tool will be able to plan tasks for you, coordinate models while staying in the budget by using small models for speed and large LLMs for the perfect result.
-No need to sacrifice the abilites large models have. Also LLM discussions are here to help with fixing halucinations!   
+All code is in the **[src/](./src/)** directory. Start there!
 
+```bash
+cd src/
+python3 "expense calculator/expense_calculator.py"
+```
 
-## Why should you care?
-You have set the price, tsena mixed the ingredients.
+## What is Tsena?
 
-With similar properties to a wiz, tsena will change model sizes for
-* a quick read through your code
-* well documented discussion on features and security
-* producing a documentation and pseudo code, for increased speed and clarity of coding
+Tsena is an LLM orchestration library that:
+- 🚀 Breaks down complex tasks into manageable subtasks
+- 💰 Manages token budgets intelligently
+- 🔄 Switches between small and large models dynamically
+- 🗣️ Fixes LLM hallucinations through discussion
+- 📊 Provides difficulty ratings and time estimates
 
+## Key Features
 
-### Other features will include:
-* offering persistance variety for LLM discussions
-* hotswapping LLM models
-* many more cool things
+- **Task Breaker** - Automatic task decomposition with difficulty and time estimates
+- **LLM Orchestration** - Coordinate multiple models while staying in budget
+- **Budget Planning** - Monitor and manage token usage
+- **Discussion Framework** - Resolve hallucinations through structured dialogue
 
+## Project Structure
+
+```
+tsena/
+├── LICENSE
+├── README.md (this file)
+└── src/ ← ALL CODE HERE
+    ├── README.md (complete documentation)
+    ├── ollama_orchestrator/ (framework & core)
+    ├── tools/ (shared services)
+    ├── expense calculator/ (project)
+    ├── expense estimator/ (project)
+    └── test files & docs
+```
+
+## See Also
+
+- **[src/README.md](./src/README.md)** - Full documentation and getting started guide
+- **[src/TRY_IT.md](./src/TRY_IT.md)** - Quick start commands
+- **[src/PLAIN_LANGUAGE_MIGRATION.md](./src/PLAIN_LANGUAGE_MIGRATION.md)** - Technical details
+
+## License
+
+See LICENSE file.
