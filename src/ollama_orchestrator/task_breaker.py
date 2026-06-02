@@ -17,9 +17,11 @@ import json
 import os
 import re
 import subprocess
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Optional
-from dataclasses import dataclass
 
 
 @dataclass
@@ -33,11 +35,26 @@ class Task:
 
 
 @dataclass
+class TaskMeasurement:
+    """Token measurement for a single task's code implementation run."""
+    task_title: str
+    prompt_tokens: int
+    response_tokens: int
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.response_tokens
+
+
+@dataclass
 class TaskBreakdown:
     """Container for broken-down tasks."""
     original_prompt: str
     tasks: list[Task]
     total_estimated_hours: float
+    total_prompt_tokens: int = 0
+    total_response_tokens: int = 0
+    measurements: list[TaskMeasurement] = field(default_factory=list)
 
 
 @lru_cache(maxsize=None)
@@ -48,6 +65,153 @@ def ollama_supports_flag(flag: str) -> bool:
         return False
     help_text = (proc.stdout or "") + "\n" + (proc.stderr or "")
     return flag in help_text
+
+
+def get_smallest_generative_model(fallback: str = "qwen2.5:3b") -> str:
+    """Return the name of the smallest generative (non-embedding) model from ollama list."""
+    try:
+        proc = subprocess.run(["ollama", "list"], capture_output=True, text=True)
+        if proc.returncode != 0:
+            return fallback
+
+        seen_ids: set[str] = set()
+        models: list[tuple[str, float]] = []
+        for line in proc.stdout.strip().split("\n")[1:]:  # skip header
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            name, model_id = parts[0], parts[1]
+            if "embed" in name.lower():
+                continue
+            if model_id in seen_ids:
+                continue
+            seen_ids.add(model_id)
+            try:
+                size_val = float(parts[2])
+                unit = parts[3].upper()
+                size_gb = size_val / 1024 if unit == "MB" else size_val
+                models.append((name, size_gb))
+            except (ValueError, IndexError):
+                continue
+
+        if not models:
+            return fallback
+        models.sort(key=lambda x: x[1])
+        return models[0][0]
+    except Exception:
+        return fallback
+
+
+def get_largest_generative_model(fallback: str = "mistral:7b") -> str:
+    """Return the name of the largest generative (non-embedding) model from ollama list."""
+    try:
+        proc = subprocess.run(["ollama", "list"], capture_output=True, text=True)
+        if proc.returncode != 0:
+            return fallback
+
+        seen_ids: set[str] = set()
+        models: list[tuple[str, float]] = []
+        for line in proc.stdout.strip().split("\n")[1:]:
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            name, model_id = parts[0], parts[1]
+            if "embed" in name.lower():
+                continue
+            if model_id in seen_ids:
+                continue
+            seen_ids.add(model_id)
+            try:
+                size_val = float(parts[2])
+                unit = parts[3].upper()
+                size_gb = size_val / 1024 if unit == "MB" else size_val
+                models.append((name, size_gb))
+            except (ValueError, IndexError):
+                continue
+
+        if not models:
+            return fallback
+        models.sort(key=lambda x: x[1], reverse=True)
+        return models[0][0]
+    except Exception:
+        return fallback
+
+
+_PROGRESS_RE = re.compile(r"\[PROGRESS:\s*(\d+)/(\d+)", re.IGNORECASE)
+
+
+def _extrapolate_tokens(tokens_so_far: int, numerator: int, denominator: int) -> int:
+    """Given tokens at numerator/denominator progress, project total tokens."""
+    if numerator <= 0:
+        return tokens_so_far
+    return int(tokens_so_far * denominator / numerator)
+
+
+def run_ollama_with_tokens(
+    model: str,
+    prompt: str,
+    temperature: Optional[float] = None,
+) -> tuple[str, int, int]:
+    """Call Ollama REST API with streaming; returns (response_text, prompt_tokens, response_tokens).
+
+    Streams the response so progress markers emitted by the model can be used
+    to extrapolate total token cost before the full reply arrives.
+    Falls back to CLI (token counts = 0) if the REST API is unreachable.
+    """
+    payload: dict = {"model": model, "prompt": prompt, "stream": True}
+    if temperature is not None:
+        payload["options"] = {"temperature": temperature}
+
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        "http://localhost:11434/api/generate",
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        chunks: list[str] = []
+        prompt_tokens = 0
+        response_tokens = 0
+        buffer = ""  # accumulate text to scan for progress markers
+
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            for raw_line in resp:
+                line = raw_line.decode("utf-8").strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                token_text = obj.get("response", "")
+                chunks.append(token_text)
+                buffer += token_text
+                response_tokens += 1  # each streamed chunk is roughly one token
+
+                # Check for a progress marker in the accumulated buffer
+                m = _PROGRESS_RE.search(buffer)
+                if m:
+                    num, denom = int(m.group(1)), int(m.group(2))
+                    est = _extrapolate_tokens(response_tokens, num, denom)
+                    print(
+                        f"  [estimator] progress {num}/{denom} detected at {response_tokens} response tokens"
+                        f" → projected total ~{est} response tokens",
+                        flush=True,
+                    )
+                    buffer = ""  # reset so we don't re-match the same marker
+
+                if obj.get("done"):
+                    prompt_tokens = obj.get("prompt_eval_count", 0)
+                    response_tokens = obj.get("eval_count", response_tokens)
+                    break
+
+        return "".join(chunks), prompt_tokens, response_tokens
+
+    except urllib.error.URLError:
+        text = run_ollama(model, prompt, temperature=temperature)
+        return text, 0, 0
 
 
 def run_ollama(
@@ -89,6 +253,65 @@ def run_ollama_json(
     if proc.returncode != 0:
         raise RuntimeError(f"Ollama CLI error: {proc.stderr.strip()}")
     return json.loads(proc.stdout)
+
+
+_IMPL_SYSTEM_PROMPT = """You are an expert software developer. Write working, production-quality code to implement the given task.
+
+PROGRESS REPORTING: Once you have completed roughly 1/10 of the implementation, print exactly one line:
+  [PROGRESS: 1/10 — <one-sentence note on what you just wrote>]
+Then continue coding. Print similar lines at 5/10 and 10/10.
+This is used by the cost estimator to extrapolate total token usage early."""
+
+
+def run_task_implementation(task: Task, model: str) -> TaskMeasurement:
+    """Ask the LLM to write code for a single task; return token measurements.
+
+    Streams the response so progress markers trigger early extrapolation printouts.
+    """
+    prompt = (
+        f"{_IMPL_SYSTEM_PROMPT}\n\n"
+        f"Task: {task.title}\n"
+        f"{task.description}\n\n"
+        "Write the complete implementation now."
+    )
+    _, prompt_tokens, response_tokens = run_ollama_with_tokens(model, prompt)
+    return TaskMeasurement(
+        task_title=task.title,
+        prompt_tokens=prompt_tokens,
+        response_tokens=response_tokens,
+    )
+
+
+def measure_tasks(
+    breakdown: TaskBreakdown,
+    model: str,
+) -> None:
+    """Run each task through the LLM for code generation and populate breakdown.measurements.
+
+    Modifies breakdown in-place.
+    """
+    print(f"Measuring per-task token usage with model: {model}")
+    print("-" * 80)
+    total_p = total_r = 0
+    for i, task in enumerate(breakdown.tasks, 1):
+        print(f"  [{i}/{len(breakdown.tasks)}] {task.title} ...", flush=True)
+        m = run_task_implementation(task, model)
+        breakdown.measurements.append(m)
+        total_p += m.prompt_tokens
+        total_r += m.response_tokens
+        if m.prompt_tokens or m.response_tokens:
+            print(
+                f"         prompt={m.prompt_tokens}, response={m.response_tokens}, "
+                f"total={m.total_tokens}",
+                flush=True,
+            )
+    print("-" * 80)
+    print(
+        f"  Total: prompt={total_p}, response={total_r}, "
+        f"grand total={total_p + total_r}, "
+        f"avg per task={((total_p + total_r) / len(breakdown.tasks)):.0f}"
+    )
+    print()
 
 
 def _remove_invalid_control_characters(text: str) -> str:
@@ -228,8 +451,12 @@ def break_down_task(
     Raises:
         RuntimeError: If all retries fail
     """
-    system_prompt = """You are a task decomposition expert. Break down the given task into smaller, 
-manageable subtasks. 
+    system_prompt = """You are a task decomposition expert. Break down the given task into smaller,
+manageable subtasks.
+
+PROGRESS REPORTING: Once you have completed roughly 1/10 of your breakdown (i.e. identified about one-tenth of the total tasks you plan to write), print a single line exactly like:
+  [PROGRESS: 1/10 — N tasks identified so far, estimating M total]
+Then continue working. Print a similar line at 5/10 and 10/10. This lets the cost estimator extrapolate total token usage from early output.
 
 IMPORTANT: Format your response EXACTLY like this example (tasks on consecutive lines, metadata on same logical block):
 
@@ -282,43 +509,52 @@ Task to break down:
 {task_description}"""
 
     last_error = None
-    
+
     for attempt in range(max_retries):
         try:
             # Adjust temperature slightly on retries for more variation
             current_temp = temperature + (attempt * 0.1)
-            
+
             # Use different prompt on retries
             current_prompt = prompt if attempt == 0 else f"""{retry_prompt}
 
 Task to break down:
 {task_description}"""
-            
-            # Get response in plain text mode
-            text_response = run_ollama(
+
+            # Call via REST API to capture actual token counts
+            text_response, prompt_tokens, response_tokens = run_ollama_with_tokens(
                 model,
                 current_prompt,
                 temperature=current_temp,
-                max_tokens=2000,
             )
-            
+
+            if prompt_tokens or response_tokens:
+                total_t = prompt_tokens + response_tokens
+                print(
+                    f"  Token usage: prompt={prompt_tokens}, response={response_tokens}, "
+                    f"total={total_t}",
+                    flush=True,
+                )
+
             # Clean invalid control characters
             text_response = _remove_invalid_control_characters(text_response)
-            
+
             # Parse the plain language response into tasks
             tasks = _parse_plain_language_tasks(text_response)
-            
+
             if not tasks:
                 raise ValueError("No tasks could be parsed from the response")
-            
+
             # Calculate total estimated hours
             total_estimated_hours = sum(task.estimated_hours for task in tasks)
-            
-            # Return the breakdown
+
+            # Return the breakdown with real token usage
             return TaskBreakdown(
                 original_prompt=task_description,
                 tasks=tasks,
                 total_estimated_hours=total_estimated_hours,
+                total_prompt_tokens=prompt_tokens,
+                total_response_tokens=response_tokens,
             )
 
         except Exception as e:
@@ -369,7 +605,13 @@ def main() -> None:
     parser.add_argument(
         "--model",
         default=None,
-        help="Model name to use. If not provided, uses OLLAMA_MODEL or 'qwen2.5:3b'",
+        help="Explicit model name. Takes precedence over --model-size.",
+    )
+    parser.add_argument(
+        "--model-size",
+        choices=["smallest", "largest"],
+        default="largest",
+        help="Pick the smallest or largest available generative model (default: largest).",
     )
     parser.add_argument(
         "--temperature",
@@ -390,7 +632,14 @@ def main() -> None:
     )
 
     args = parser.parse_args()
-    model = args.model or os.environ.get("OLLAMA_MODEL", "qwen2.5:3b")
+    if args.model:
+        model = args.model
+    elif os.environ.get("OLLAMA_MODEL"):
+        model = os.environ["OLLAMA_MODEL"]
+    elif args.model_size == "smallest":
+        model = get_smallest_generative_model()
+    else:
+        model = get_largest_generative_model()
 
     print(f"Breaking down task using model: {model}")
     breakdown = break_down_task(
