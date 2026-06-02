@@ -173,7 +173,9 @@ def run_ollama_with_tokens(
         chunks: list[str] = []
         prompt_tokens = 0
         response_tokens = 0
-        buffer = ""  # accumulate text to scan for progress markers
+        buffer = ""
+        stop_at: Optional[int] = None       # token count at which to cut the stream
+        extrapolated_total: Optional[int] = None
 
         with urllib.request.urlopen(req, timeout=300) as resp:
             for raw_line in resp:
@@ -188,24 +190,39 @@ def run_ollama_with_tokens(
                 token_text = obj.get("response", "")
                 chunks.append(token_text)
                 buffer += token_text
-                response_tokens += 1  # each streamed chunk is roughly one token
+                response_tokens += 1  # each chunk ≈ one token
 
-                # Check for a progress marker in the accumulated buffer
-                m = _PROGRESS_RE.search(buffer)
-                if m:
-                    num, denom = int(m.group(1)), int(m.group(2))
-                    est = _extrapolate_tokens(response_tokens, num, denom)
+                # First progress marker sets the early-stop threshold (50% of projection)
+                if stop_at is None:
+                    m = _PROGRESS_RE.search(buffer)
+                    if m:
+                        num, denom = int(m.group(1)), int(m.group(2))
+                        extrapolated_total = _extrapolate_tokens(response_tokens, num, denom)
+                        stop_at = max(response_tokens, int(extrapolated_total * 0.5))
+                        print(
+                            f"  [estimator] progress {num}/{denom} at {response_tokens} tokens"
+                            f" → projected ~{extrapolated_total} total"
+                            f" → stopping stream at {stop_at} (50%)",
+                            flush=True,
+                        )
+                        buffer = ""
+
+                # Stop reading once we hit the 50% mark
+                if stop_at is not None and response_tokens >= stop_at:
                     print(
-                        f"  [estimator] progress {num}/{denom} detected at {response_tokens} response tokens"
-                        f" → projected total ~{est} response tokens",
+                        f"  [estimator] reached 50% threshold ({response_tokens} tokens), closing stream",
                         flush=True,
                     )
-                    buffer = ""  # reset so we don't re-match the same marker
+                    break
 
                 if obj.get("done"):
                     prompt_tokens = obj.get("prompt_eval_count", 0)
                     response_tokens = obj.get("eval_count", response_tokens)
                     break
+
+        # If we cut the stream early, report the extrapolated total as response_tokens
+        if extrapolated_total is not None and stop_at is not None:
+            response_tokens = extrapolated_total
 
         return "".join(chunks), prompt_tokens, response_tokens
 
@@ -429,19 +446,19 @@ def _is_valid_json_string(text: str) -> bool:
 
 def break_down_task(
     task_description: str,
-    model: str = "qwen2.5:3b",
+    model: str = "mistral:7b",
     temperature: float = 0.3,
     max_retries: int = 3,
 ) -> TaskBreakdown:
     """
     Break down a high-level task into smaller subtasks with difficulty ratings.
-    
+
     Uses plain language to request task breakdown and parses the response.
     Includes automatic retry logic for handling parsing errors.
 
     Args:
         task_description: The high-level task to break down
-        model: The ollama model to use (default: qwen2.5:3b)
+        model: The ollama model to use (default: mistral:7b)
         temperature: Temperature for the LLM (lower = more deterministic)
         max_retries: Maximum number of retries on failure (default: 3)
 

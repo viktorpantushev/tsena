@@ -5,10 +5,11 @@
 #   Python >= 3.9
 #   Ollama  https://ollama.com/download
 #
-# Required model (must be pulled before running):
+# Recommended minimum model (7B+ reliably follows structured formatting instructions):
+#   ollama pull mistral:7b
+#
+# Optional smaller model (fast breakdown, but may not follow progress-marker format):
 #   ollama pull qwen2.5:3b
 #
-# Optional models (used automatically when budget allows):
-#   ollama pull qwen2.5:7b
-#   ollama pull qwen2.5:14b
-#   ollama pull llama2:70b
+# Cloud cost catalogue (referenced in expense_estimator.py LLM_MODELS, not run locally):
+#   qwen2.5:7b, qwen2.5:14b, llama2:70b

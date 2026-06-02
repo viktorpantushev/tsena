@@ -2,7 +2,7 @@
 
 **LLM cost estimator** — break a project into tasks, run each task through a local model to measure real token usage, then project what the project would cost on cloud LLM APIs.
 
-Tsena uses [Ollama](https://ollama.com) to run models locally. It decomposes a project description into subtasks, asks the model to write actual code for each subtask (measuring real token counts via the Ollama REST API), and uses those measurements to recommend the best cloud model tier for the budget.
+Tsena uses [Ollama](https://ollama.com) to run models locally. It decomposes a project description into subtasks using a user-chosen model, then runs each subtask through the **largest locally installed model** to generate real code (measuring actual token counts via the Ollama REST API). Those measurements are used to recommend the best cloud model tier for the budget.
 
 ---
 
@@ -64,12 +64,12 @@ python3 expense_estimator.py
 You will be prompted for:
 
 1. **Budget** — your total token spend limit in USD (e.g. `10`)
-2. **Model** — which locally installed model to use for task breakdown and measurement (listed by number)
+2. **Model** — which locally installed model to use for task breakdown (listed by number)
 
 Tsena then:
 
-1. Breaks the project description into subtasks with difficulty ratings and hour estimates
-2. Runs each subtask through the chosen model, asking it to write real implementation code — measuring actual `prompt_tokens` and `response_tokens` via the Ollama REST API
+1. Breaks the project description into subtasks with difficulty ratings and hour estimates using the chosen model
+2. Runs each subtask through the **largest locally installed model**, asking it to write real implementation code — measuring actual `prompt_tokens` and `response_tokens` via the Ollama REST API
 3. Prints a per-task token breakdown and calculates the average tokens per task
 4. Recommends the best cloud model tier (from the catalogue in `LLM_MODELS`) whose projected cost fits within the budget
 
@@ -78,10 +78,10 @@ Tsena then:
 ## How it works
 
 ```
-1. Task breakdown (one LLM call)
+1. Task breakdown (one LLM call — user-chosen model)
    └─ project description → list of subtasks with difficulty + hour estimates
 
-2. Per-task measurement (one LLM call per subtask)
+2. Per-task measurement (one LLM call per subtask — always the largest installed model)
    └─ "write the code for this task" → real prompt_tokens + response_tokens
         └─ progress markers [PROGRESS: 1/10 ...] trigger early extrapolation printouts
 
@@ -90,7 +90,7 @@ Tsena then:
         └─ pick the tier whose cost ≈ 50% of budget and fits task difficulty
 ```
 
-**Progress markers** — the system prompt instructs the model to print `[PROGRESS: 1/10 — ...]` once it has written ~10% of the implementation, then again at 5/10 and 10/10. When a marker appears in the stream, the estimator prints a projected total token count immediately (before the full response arrives). Larger models (7B+) follow this instruction reliably; smaller models may skip it, but real token counts are always captured at the end of the stream regardless.
+**Progress markers** — the system prompt instructs the model to print `[PROGRESS: 1/10 — ...]` once it has written ~10% of the implementation. When that marker appears in the stream, the estimator immediately extrapolates the full token count and **closes the stream at 50% of the projected total** — the model never writes more than half the code. The reported token count is the extrapolated full total. Larger models (7B+) follow this instruction reliably; smaller models may skip it, in which case the stream runs to completion and the real final count is used.
 
 **Token counting** — uses the Ollama REST API (`POST /api/generate` with `"stream": true`) rather than the CLI, so `prompt_eval_count` and `eval_count` are available in the final streaming chunk. Falls back to the CLI if the REST API is unreachable.
 
@@ -195,7 +195,10 @@ Run `ollama pull <model-name>` first, e.g. `ollama pull mistral:7b`.
 The Ollama daemon is not running. Start it with `ollama serve` or open the Ollama desktop app. The tools fall back to the CLI automatically but token counts will not be available.
 
 **Progress markers never appear**
-The model skipped the formatting instruction. This is common with sub-3B models. Real token counts are still captured at the end of the stream — cost estimates remain accurate, you just lose the early extrapolation printout.
+The model skipped the formatting instruction. This is common with sub-3B models. The full response is still read and real token counts are captured — cost estimates remain accurate, you just lose the early-stop optimisation (the stream runs to completion instead of cutting at 50%).
+
+**Stream cuts off mid-response**
+Expected behaviour — when a `[PROGRESS: 1/10]` marker is detected, the estimator closes the stream at 50% of the projected total to save time. The reported token count is the extrapolated full total, not the truncated count.
 
 **Tasks parsed incorrectly (metadata lines become task titles)**
 Use a larger model (`--model-size largest` or `--model mistral:7b`). Small models often fail to follow the structured output format, causing the parser to misread metadata lines as task titles.
