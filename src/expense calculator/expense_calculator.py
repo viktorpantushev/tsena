@@ -11,6 +11,7 @@ This demonstrates using Task Breaker with smart LLM selection based on:
 
 import sys
 import os
+import re
 import time
 import subprocess
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../ollama_orchestrator'))
@@ -46,138 +47,145 @@ LLM_MODELS = {
 }
 
 
-def benchmark_cheapest_model(task_description, max_duration=15):
+def benchmark_cheapest_model(task_description, stop_at_percent=30, timeout=120):
     """
-    Run the cheapest model with progress tracking to estimate real costs.
-    Only runs for limited time to get baseline metrics.
-    
+    Run the cheapest model, watch for progress markers, and stop at ≤30%.
+    Extrapolates total time using: elapsed * (100 / reported_percent).
+
     Args:
         task_description: Task to break down
-        max_duration: Max seconds to let it run (default 15s)
-    
+        stop_at_percent: Stop as soon as the LLM reports this % or less (default 30)
+        timeout: Hard fallback timeout in seconds (default 120)
+
     Returns:
-        dict: {'elapsed_time': seconds, 'tokens_estimated': count, 'actual_cost_per_1k': float}
+        dict with 'elapsed_time', 'tokens_estimated', 'actual_cost_per_1k', 'tokens_per_second'
     """
     cheapest_model = "qwen2.5:3b"
-    print("📊 COST ESTIMATION: Running quick benchmark with cheapest model...")
+    print(f"📊 COST ESTIMATION: Running benchmark (stops at first ≤{stop_at_percent}% progress marker)...")
     print()
-    
-    start_time = time.time()
-    start_marker = "START_BENCHMARK"
-    end_marker = "END_BENCHMARK"
-    
-    # Create a quick test prompt that reports progress
-    test_prompt = f"""Break down this task into steps. Report progress as you go:
-    
+
+    test_prompt = f"""Break down this task into steps. Report your progress as you go.
+
 {task_description}
 
-As you think through this, include progress percentages like: [25% complete], [50% complete], [75% complete]"""
-    
+IMPORTANT: After every step you outline, print a progress line in EXACTLY this format:
+[X% complete]
+Use 25% after the first step, 50% after the second, 75% after the third, and so on."""
+
+    cost_per_1k = LLM_MODELS[cheapest_model]["cost_per_1k_tokens"]
+
     try:
-        # Use ollama CLI directly to track real execution time
-        cmd = [
-            "ollama", "run", cheapest_model, 
-            f"--verbose {test_prompt}"
-        ]
-        
         process = subprocess.Popen(
-            cmd,
+            ["ollama", "run", cheapest_model, test_prompt],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True
+            text=True,
         )
-        
-        output_chars = 0
-        progress_markers = []
-        
-        # Read output with timeout
-        try:
-            for line in iter(process.stdout.readline, ''):
-                if not line:
-                    break
-                output_chars += len(line)
-                elapsed = time.time() - start_time
-                
-                # Track progress markers
-                if '%' in line and 'complete' in line.lower():
-                    progress_markers.append((elapsed, line.strip()))
-                    print(f"  ⏱️  {elapsed:.1f}s - {line.strip()[:70]}")
-                
-                # Stop after max_duration
-                if elapsed > max_duration:
-                    process.terminate()
-                    print(f"  ⏹️  Stopping benchmark at {max_duration}s (max duration)")
-                    break
-        except:
-            pass
-        
-        process.wait(timeout=2)
-        
-    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+    except FileNotFoundError as e:
         print(f"  ⚠️  Benchmark skipped: {e}")
-        # Fallback to estimated values
         return {
-            'elapsed_time': max_duration,
-            'tokens_estimated': LLM_MODELS["qwen2.5:3b"]["avg_tokens_per_task"],
-            'actual_cost_per_1k': LLM_MODELS["qwen2.5:3b"]["cost_per_1k_tokens"],
-            'tokens_per_second': 50,  # default estimate
+            'elapsed_time': 30,
+            'tokens_estimated': LLM_MODELS[cheapest_model]["avg_tokens_per_task"],
+            'actual_cost_per_1k': cost_per_1k,
+            'tokens_per_second': 50,
         }
-    
-    elapsed_time = time.time() - start_time
-    
-    # Estimate tokens from output chars (rough: ~4 chars per token)
-    tokens_generated = max(output_chars // 4, 100)
-    tokens_per_second = tokens_generated / elapsed_time if elapsed_time > 0 else 50
-    
-    # Calculate actual cost per 1k tokens based on execution
-    cost_per_1k = LLM_MODELS["qwen2.5:3b"]["cost_per_1k_tokens"]
-    
+
+    start_time = time.time()
+    output_chars = 0
+    elapsed_at_stop = None
+    reported_percent = None
+
+    try:
+        for line in iter(process.stdout.readline, ''):
+            if not line:
+                break
+            output_chars += len(line)
+            elapsed = time.time() - start_time
+
+            pct_match = re.search(r'\[(\d+)\s*%', line)
+            if pct_match:
+                pct = int(pct_match.group(1))
+                print(f"  ⏱️  {elapsed:.1f}s — {line.strip()[:70]}")
+                if pct <= stop_at_percent:
+                    elapsed_at_stop = elapsed
+                    reported_percent = pct
+                    process.terminate()
+                    print(f"  ⏹️  Stopped at {pct}% ({elapsed:.1f}s)")
+                    break
+
+            if elapsed > timeout:
+                process.terminate()
+                print(f"  ⏹️  Hard timeout at {timeout}s — no progress marker found")
+                break
+    except Exception:
+        pass
+
+    process.wait(timeout=2)
+
+    tokens_so_far = max(output_chars // 4, 10)
+
+    if elapsed_at_stop and reported_percent:
+        multiplier = 100 / reported_percent
+        estimated_total_time = elapsed_at_stop * multiplier
+        estimated_total_tokens = int(tokens_so_far * multiplier)
+        tokens_per_second = tokens_so_far / elapsed_at_stop
+    else:
+        elapsed_time = time.time() - start_time
+        estimated_total_time = elapsed_time
+        estimated_total_tokens = max(tokens_so_far, LLM_MODELS[cheapest_model]["avg_tokens_per_task"])
+        tokens_per_second = tokens_so_far / elapsed_time if elapsed_time > 0 else 50
+
     print()
-    print("📈 Benchmark Results:")
-    print(f"  ⏱️  Elapsed time: {elapsed_time:.2f}s")
-    print(f"  🔤 Tokens generated: ~{tokens_generated} (at {tokens_per_second:.0f} tokens/sec)")
-    print(f"  💰 Cost: ${(tokens_generated / 1000) * cost_per_1k:.4f}")
-    if progress_markers:
-        print(f"  📊 Progress reported: {len(progress_markers)} checkpoints")
+    if elapsed_at_stop:
+        print(f"📈 Benchmark Results (extrapolated from {reported_percent}%):")
+        print(f"  ⏱️  Time at {reported_percent}%: {elapsed_at_stop:.2f}s  ×{100/reported_percent:.1f} → {estimated_total_time:.1f}s total")
+    else:
+        print("📈 Benchmark Results (fallback — no progress marker):")
+        print(f"  ⏱️  Elapsed: {estimated_total_time:.1f}s")
+    print(f"  🔤 Tokens/sec: ~{tokens_per_second:.0f}")
+    print(f"  💰 Estimated cost: ${(estimated_total_tokens / 1000) * cost_per_1k:.4f}")
     print()
-    
+
     return {
-        'elapsed_time': elapsed_time,
-        'tokens_estimated': tokens_generated,
+        'elapsed_time': estimated_total_time,
+        'tokens_estimated': estimated_total_tokens,
         'actual_cost_per_1k': cost_per_1k,
         'tokens_per_second': tokens_per_second,
     }
 
 
-def extrapolate_model_costs(benchmark_data, task_estimate_tokens):
+def extrapolate_model_costs(benchmark_data):
     """
     Use benchmark data to extrapolate real costs for all models.
-    
+    Both token count and time come from the benchmark's own extrapolation
+    (same multiplier logic: stopped at X%, scaled by 100/X).
+
     Args:
         benchmark_data: Results from benchmark_cheapest_model()
-        task_estimate_tokens: Estimated tokens for full task breakdown
-    
+
     Returns:
-        dict: Updated model costs based on actual performance
+        dict: Model costs based on actual measured performance
     """
     extrapolated = {}
-    baseline_tokens_per_sec = benchmark_data['tokens_per_second']
-    
+    tokens_estimated = benchmark_data['tokens_estimated']
+    tokens_per_second = benchmark_data['tokens_per_second']
+
     for model_name, model_info in LLM_MODELS.items():
-        estimated_time = task_estimate_tokens / baseline_tokens_per_sec
-        estimated_cost = (task_estimate_tokens / 1000) * model_info['cost_per_1k_tokens']
-        
+        estimated_tokens = tokens_estimated
+        estimated_time = estimated_tokens / tokens_per_second
+        estimated_cost = (estimated_tokens / 1000) * model_info['cost_per_1k_tokens']
+
         extrapolated[model_name] = {
             'estimated_time': estimated_time,
             'estimated_cost': estimated_cost,
-            'estimated_tokens': task_estimate_tokens,
+            'estimated_tokens': estimated_tokens,
             'model_info': model_info,
         }
-    
+
     return extrapolated
 
 
-
+def get_project_budget():
     """Ask user for project budget and return in dollars."""
     print("💰 PROJECT COST PLANNING")
     print("=" * 80)
@@ -196,82 +204,64 @@ def extrapolate_model_costs(benchmark_data, task_estimate_tokens):
             print("❌ Invalid input. Please enter a number.")
 
 
-def select_best_model(budget, total_difficulty, extrapolated_costs=None):
+def select_model_mix(budget, tasks, benchmark_data):
     """
-    Select the best LLM model based on budget, difficulty, and actual benchmark data.
-    Targets using 50% of the budget for optimal cost-benefit ratio.
-    
+    Assign the best affordable model to each task individually.
+
+    Token budget per task is proportional to its estimated_hours share of the
+    total (same extrapolation ratio the benchmark used for time and tokens).
+    Model capability is matched to task difficulty; if the total cost exceeds
+    the budget, the easiest tasks are downgraded first so harder tasks keep
+    the most capable model possible.
+
     Args:
-        budget: Available budget in USD
-        total_difficulty: Average difficulty of all tasks (1-5)
-        extrapolated_costs: Optional dict of extrapolated costs from benchmark
-    
+        budget: Total available budget in USD
+        tasks: List of Task objects from the breakdown
+        benchmark_data: Results from benchmark_cheapest_model()
+
     Returns:
-        tuple: (model_name, model_info, estimated_cost, time_estimate, reasoning)
+        (assignments, total_cost)
+        assignments: list of dicts with task, model, tokens, cost, time
     """
-    print("🧠 SELECTING OPTIMAL LLM MODEL (Based on Real Performance Data)")
-    print("=" * 80)
-    print()
-    
-    target_budget = budget * 0.5  # Target 50% of budget
-    available_models = []
-    
-    for model_name, model_info in LLM_MODELS.items():
-        # Check if model is suitable for difficulty
-        min_diff, max_diff = model_info["difficulty_range"]
-        if total_difficulty < min_diff or total_difficulty > max_diff:
-            continue
-        
-        # Use extrapolated data if available
-        if extrapolated_costs and model_name in extrapolated_costs:
-            estimated_cost = extrapolated_costs[model_name]['estimated_cost']
-            estimated_time = extrapolated_costs[model_name]['estimated_time']
-        else:
-            estimated_tokens = model_info["avg_tokens_per_task"]
-            estimated_cost = (estimated_tokens / 1000) * model_info["cost_per_1k_tokens"]
-            estimated_time = estimated_tokens / 50  # default 50 tokens/sec
-        
-        # Check if within budget
-        if estimated_cost <= budget:
-            distance_from_target = abs(estimated_cost - target_budget)
-            
-            available_models.append({
-                "name": model_name,
-                "info": model_info,
-                "estimated_cost": estimated_cost,
-                "estimated_time": estimated_time,
-                "distance_from_target": distance_from_target,
-                "budget_utilization": (estimated_cost / budget) * 100,
-            })
-    
-    if not available_models:
-        print(f"⚠️  No suitable models within budget for difficulty {total_difficulty}/5")
-        print(f"   Your budget: ${budget:.2f}")
-        return list(LLM_MODELS.items())[0][0], list(LLM_MODELS.items())[0][1], None, None, "Budget exceeded, using fallback"
-    
-    # Sort by distance from 50% target
-    available_models.sort(key=lambda x: x["distance_from_target"])
-    selected = available_models[0]
-    
-    print(f"📊 Task Difficulty Average: {total_difficulty:.1f}/5")
-    print(f"💵 Available Budget: ${budget:.2f}")
-    print(f"🎯 Target Spending (50%): ${target_budget:.2f}")
-    print()
-    print("Available models (ranked by performance & cost efficiency):")
-    for i, model in enumerate(available_models, 1):
-        utilization = model['budget_utilization']
-        print(f"  {i}. {model['info']['display_name']}")
-        print(f"     Cost: ${model['estimated_cost']:.4f} ({utilization:.1f}% of budget)")
-        print(f"     Est. Time: {model['estimated_time']:.1f}s")
-        print(f"     Distance from 50% target: ${model['distance_from_target']:.4f}")
-    print()
-    print(f"✅ Selected: {selected['info']['display_name']}")
-    print(f"   Estimated Cost: ${selected['estimated_cost']:.4f}")
-    print(f"   Estimated Time: {selected['estimated_time']:.1f}s")
-    print(f"   Budget Utilization: {selected['budget_utilization']:.1f}% (Target: 50%)")
-    print()
-    
-    return selected["name"], selected["info"], selected["estimated_cost"], selected["estimated_time"], "Optimized based on real benchmark"
+    spend_limit = budget * 0.7  # 30% buffer reserved
+    total_tokens = benchmark_data['tokens_estimated']
+    tokens_per_sec = benchmark_data['tokens_per_second']
+
+    total_hours = sum(t.estimated_hours for t in tasks) or 1.0
+
+    task_tokens = {
+        t.title: max(int(total_tokens * (t.estimated_hours / total_hours)), 50)
+        for t in tasks
+    }
+
+    def best_model_for_budget(tokens, task_budget):
+        """Most capable model whose cost for `tokens` fits within `task_budget`."""
+        affordable = [
+            (name, info) for name, info in LLM_MODELS.items()
+            if (tokens / 1000) * info['cost_per_1k_tokens'] <= task_budget
+        ]
+        if not affordable:
+            # Nothing fits — fall back to cheapest available
+            return min(LLM_MODELS.items(), key=lambda x: x[1]['cost_per_1k_tokens'])
+        return max(affordable, key=lambda x: x[1]['cost_per_1k_tokens'])
+
+    assignments = []
+    for task in tasks:
+        tokens = task_tokens[task.title]
+        # Each task's budget share is proportional to its token weight
+        task_budget = spend_limit * (tokens / total_tokens)
+        name, info = best_model_for_budget(tokens, task_budget)
+        assignments.append({
+            'task': task,
+            'model': name,
+            'model_info': info,
+            'tokens': tokens,
+            'cost': (tokens / 1000) * info['cost_per_1k_tokens'],
+            'time': tokens / tokens_per_sec,
+        })
+
+    total_cost = sum(a['cost'] for a in assignments)
+    return assignments, total_cost
 
 
 
@@ -279,8 +269,7 @@ def main():
     """Main expense calculator workflow."""
     # Step 1: Get budget
     budget = get_project_budget()
-    
-    # Step 2: Task description
+
     task_description = """
     Build a web-based expense calculator with the following features:
     - User authentication (login/register)
@@ -290,12 +279,15 @@ def main():
     - Export to CSV
     - Real-time calculations
     """
-    
+
     print("🧮 EXPENSE CALCULATOR - TASK BREAKDOWN")
     print("=" * 80)
     print()
-    
-    # Step 3: Break down tasks with initial model
+
+    # Step 2: Benchmark cheapest model to get real token/time data
+    benchmark_data = benchmark_cheapest_model(task_description)
+
+    # Step 3: Break down tasks
     print("⏳ Breaking down tasks...")
     breakdown = break_down_task(
         task_description,
@@ -303,37 +295,32 @@ def main():
         temperature=0.3,
         max_retries=3,
     )
-    
-    # Step 4: Display task breakdown
     print(format_task_breakdown(breakdown))
     print()
-    
-    # Step 5: Calculate average difficulty
-    if breakdown.tasks:
-        avg_difficulty = sum(task.difficulty for task in breakdown.tasks) / len(breakdown.tasks)
-    else:
-        avg_difficulty = 3.0
-    
+
+    # Step 4: Assign best model mix per task within budget
+    print("🧠 SELECTING MODEL MIX")
     print("=" * 80)
+    assignments, total_cost = select_model_mix(budget, breakdown.tasks, benchmark_data)
+
+    print(f"{'Task':<40} {'Difficulty':>10} {'Model':<28} {'Tokens':>7} {'Cost':>8}")
+    print("-" * 100)
+    for a in assignments:
+        title = a['task'].title[:38]
+        diff = f"{a['task'].difficulty}/5"
+        model = a['model_info']['display_name'][:26]
+        print(f"{title:<40} {diff:>10} {model:<28} {a['tokens']:>7} ${a['cost']:>7.4f}")
+    print("-" * 100)
+    print(f"{'TOTAL':<40} {'':>10} {'':28} {'':>7} ${total_cost:>7.4f}")
     print()
-    
-    # Step 6: Select optimal model based on budget and difficulty
-    selected_model, model_info, estimated_cost, reasoning = select_best_model(budget, avg_difficulty)
-    
-    print("=" * 80)
-    print()
-    print("📋 PROJECT SUMMARY")
-    print("=" * 80)
-    print(f"Total Tasks: {len(breakdown.tasks)}")
-    print(f"Average Difficulty: {avg_difficulty:.1f}/5")
-    print(f"Estimated Project Hours: {breakdown.total_estimated_hours:.1f}h")
-    print()
-    print(f"Selected Model: {model_info['display_name']}")
-    print(f"Reason: {reasoning}")
-    print(f"Budget: ${budget:.2f}")
-    if estimated_cost:
-        print(f"Estimated LLM Cost: ${estimated_cost:.4f}")
-        print(f"Remaining Budget: ${(budget - estimated_cost):.2f}")
+
+    spend_limit = budget * 0.7
+    over = total_cost > spend_limit
+    print(f"💵 Budget:        ${budget:.2f}")
+    print(f"🔒 Spend limit:   ${spend_limit:.2f}  (70% — 30% buffer reserved)")
+    print(f"💰 Total cost:    ${total_cost:.4f}  {'⚠️  OVER SPEND LIMIT' if over else '✅'}")
+    if not over:
+        print(f"💚 Buffer left:   ${spend_limit - total_cost:.4f}")
     print()
     print("=" * 80)
 

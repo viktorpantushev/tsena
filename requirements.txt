@@ -1,0 +1,14 @@
+# Tsena has no pip dependencies — it uses Python's standard library only.
+#
+# Runtime requirements (install manually):
+#
+#   Python >= 3.9
+#   Ollama  https://ollama.com/download
+#
+# Required model (must be pulled before running):
+#   ollama pull qwen2.5:3b
+#
+# Optional models (used automatically when budget allows):
+#   ollama pull qwen2.5:7b
+#   ollama pull qwen2.5:14b
+#   ollama pull llama2:70b
