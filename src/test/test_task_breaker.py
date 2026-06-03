@@ -4,6 +4,10 @@ Quick test script to try the Task Breaker feature
 Run this directly to see the feature in action
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 from ollama_orchestrator.task_breaker import break_down_task, format_task_breakdown
 
 

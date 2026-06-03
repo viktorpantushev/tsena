@@ -3,6 +3,10 @@
 Test the new plain language parsing feature
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 from ollama_orchestrator.task_breaker import _parse_plain_language_tasks, Task
 
 # Test case 1: Simple plain language output from LLM

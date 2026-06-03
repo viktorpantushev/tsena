@@ -14,7 +14,7 @@ import os
 import re
 import time
 import subprocess
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../ollama_orchestrator'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../ollama_orchestrator'))
 
 from task_breaker import break_down_task, format_task_breakdown
 

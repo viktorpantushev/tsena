@@ -57,7 +57,7 @@ cd tsena
 ## Quick Start
 
 ```bash
-cd src/expense\ estimator
+cd src/tools/expense\ estimator
 python3 expense_estimator.py
 ```
 
@@ -162,12 +162,17 @@ tsena/
     │   ├── task_breaker.py         Task decomposition, per-task measurement, token streaming
     │   ├── tools/                  HTTP microservices
     │   └── examples/               Runnable demos (discussion, tool use, task breaker)
-    ├── expense estimator/
-    │   └── expense_estimator.py    Main entry point — budget input, model pick, full pipeline
-    ├── expense calculator/
-    │   └── expense_calculator.py   Earlier prototype
-    ├── tools/                      Shared HTTP services
-    └── test_*.py                   Test suite
+    └── tools/
+        ├── expense estimator/
+        │   └── expense_estimator.py    Main entry point — budget input, model pick, full pipeline
+        ├── expense calculator/
+        │   └── expense_calculator.py   Earlier prototype
+        ├── discussion_length_service.py
+        └── task_breaker_service.py
+    └── test/                       Test suite
+        ├── test_plain_language_parser.py
+        ├── test_task_breaker.py
+        └── test_service.py
 ```
 
 ---
@@ -175,10 +180,9 @@ tsena/
 ## Running the tests
 
 ```bash
-cd src
-python3 test_plain_language_parser.py   # parser unit tests (no Ollama needed)
-python3 test_task_breaker.py            # full breakdown tests (requires Ollama)
-python3 test_service.py                 # HTTP service tests (requires Ollama)
+python3 src/test/test_plain_language_parser.py   # parser unit tests (no Ollama needed)
+python3 src/test/test_task_breaker.py            # full breakdown tests (requires Ollama)
+python3 src/test/test_service.py                 # HTTP service tests (requires Ollama)
 ```
 
 ---
