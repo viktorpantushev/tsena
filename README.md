@@ -162,15 +162,13 @@ tsena/
     │   ├── task_breaker.py         Task decomposition, per-task measurement, token streaming
     │   ├── tools/                  HTTP microservices
     │   └── examples/               Runnable demos (discussion, tool use, task breaker)
-    └── tools/
-        ├── expense_estimator.py        Main entry point — budget input, model pick, full pipeline
-        ├── expense_calculator.py       Earlier prototype
-        ├── discussion_length_service.py
-        └── task_breaker_service.py
-    └── test/                       Test suite
-        ├── test_plain_language_parser.py
-        ├── test_task_breaker.py
-        └── test_service.py
+    ├── tools/
+    │   ├── expense_estimator.py        Main entry point — budget input, model pick, full pipeline
+    │   ├── expense_calculator.py       Earlier prototype
+    │   ├── discussion_length_service.py
+    │   └── task_breaker_service.py
+    └── test/
+        └── tsena_demo.ipynb            Interactive demo + test suite
 ```
 
 ---
@@ -178,10 +176,10 @@ tsena/
 ## Running the tests
 
 ```bash
-python3 src/test/test_plain_language_parser.py   # parser unit tests (no Ollama needed)
-python3 src/test/test_task_breaker.py            # full breakdown tests (requires Ollama)
-python3 src/test/test_service.py                 # HTTP service tests (requires Ollama)
+jupyter notebook src/test/tsena_demo.ipynb
 ```
+
+Run cells top-to-bottom. Sections 1–2 (parser unit tests) need no Ollama. Sections 3–9 require Ollama with at least one generative model installed.
 
 ---
 

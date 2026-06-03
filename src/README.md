@@ -4,20 +4,13 @@ For installation and quick start see the [root README](../README.md).
 
 ---
 
-## Running the expense calculator
+## Running the expense estimator
 
 ```bash
-cd src
-python3 "expense calculator/expense_calculator.py"
+python3 src/tools/expense_estimator.py
 ```
 
-Enter a budget in USD when prompted. Suggested values to see different model mixes:
-
-| Budget | What you'll see |
-|---|---|
-| `$0.05` | qwen2.5:3b for most tasks |
-| `$0.10` | qwen2.5:14b for most tasks |
-| `$1.00` | llama2:70b where available |
+Enter a budget in USD when prompted. The estimator breaks the project into subtasks, measures real token usage via a local model, and recommends the best cloud model tier.
 
 ---
 
@@ -28,51 +21,49 @@ from ollama_orchestrator.task_breaker import break_down_task, format_task_breakd
 
 breakdown = break_down_task("Build a REST API", model="qwen2.5:3b")
 print(format_task_breakdown(breakdown))
-# breakdown.tasks          → list of Task(title, description, difficulty, estimated_hours, dependencies)
-# breakdown.total_estimated_hours → sum of all task hours
+# breakdown.tasks                → list of Task objects
+# breakdown.total_estimated_hours → sum of all estimated hours
 ```
 
-CLI usage:
+CLI:
 
 ```bash
-python3 ollama_orchestrator/task_breaker.py --prompt "Build a REST API"
-python3 ollama_orchestrator/task_breaker.py --prompt "Build a REST API" --json
+python3 src/ollama_orchestrator/task_breaker.py --prompt "Build a REST API"
+python3 src/ollama_orchestrator/task_breaker.py --prompt "Build a REST API" --json
 ```
 
 ---
 
-## HTTP microservices
-
-### task_breaker_service — port 5001
+## HTTP microservice — task_breaker_service (port 5001)
 
 ```bash
-python3 tools/task_breaker_service.py
+python3 src/ollama_orchestrator/tools/task_breaker_service.py
 ```
 
 ```bash
 curl -X POST http://127.0.0.1:5001/break-task \
   -H "Content-Type: application/json" \
   -d '{"task": "Build a web app", "model": "qwen2.5:3b"}'
-```
 
-Health check: `curl http://127.0.0.1:5001/health`
+curl http://127.0.0.1:5001/health
+```
 
 ---
 
 ## Tests
 
 ```bash
-python3 test_plain_language_parser.py   # no ollama needed
-python3 test_task_breaker.py            # requires ollama + qwen2.5:3b
-python3 test_service.py                 # requires ollama + qwen2.5:3b
+jupyter notebook src/test/tsena_demo.ipynb
 ```
+
+Run cells top-to-bottom. Sections 1–2 need no Ollama; sections 3–9 require Ollama with at least one generative model.
 
 ---
 
 ## Examples
 
 ```bash
-python3 ollama_orchestrator/examples/task_breaker_demo.py
-python3 ollama_orchestrator/examples/orchestrator_with_task_breaker.py
-python3 ollama_orchestrator/examples/orchestrator_discussion.py
+python3 src/ollama_orchestrator/examples/task_breaker_demo.py
+python3 src/ollama_orchestrator/examples/orchestrator_with_task_breaker.py
+python3 src/ollama_orchestrator/examples/orchestrator_discussion.py
 ```
