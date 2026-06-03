@@ -48,7 +48,7 @@ Tsena auto-detects all installed models at startup via `ollama list`.
 ### 3. Clone the repository
 
 ```bash
-git clone https://github.com/your-org/tsena.git
+git clone https://github.com/viktorpantushev/tsena.git
 cd tsena
 ```
 
