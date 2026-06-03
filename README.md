@@ -57,8 +57,7 @@ cd tsena
 ## Quick Start
 
 ```bash
-cd src/tools
-python3 expense_estimator.py
+python3 src/tools/expense_estimator.py
 ```
 
 You will be prompted for:
@@ -101,8 +100,7 @@ Tsena then:
 ### Task breaker
 
 ```bash
-cd src/ollama_orchestrator
-python3 task_breaker.py --prompt "Build a REST API with authentication"
+python3 src/tools/task_breaker.py --prompt "Build a REST API with authentication"
 ```
 
 | Flag | Default | Description |
@@ -117,10 +115,9 @@ python3 task_breaker.py --prompt "Build a REST API with authentication"
 ### Orchestrator
 
 ```bash
-cd src/ollama_orchestrator
-python3 orchestrator.py --prompt "Explain async/await in Python"
-python3 orchestrator.py --prompt "..." --model-size smallest
-python3 orchestrator.py --prompt "..." --json
+python3 src/ollama_orchestrator/orchestrator.py --prompt "Explain async/await in Python"
+python3 src/ollama_orchestrator/orchestrator.py --prompt "..." --model-size smallest
+python3 src/ollama_orchestrator/orchestrator.py --prompt "..." --json
 ```
 
 Same `--model` / `--model-size` flags as the task breaker.
@@ -140,10 +137,10 @@ Same `--model` / `--model-size` flags as the task breaker.
 | Budget-aware model recommendation using real token data | Done |
 | `--model-size smallest\|largest` flag for CLI tools | Done |
 | Ollama CLI wrapper (temperature, JSON mode) | Done |
-| LLM discussion (two models debate, third judges) | Done — `examples/orchestrator_discussion.py` |
+| LLM discussion (two models debate, third judges) | Done — `src/ollama_orchestrator/orchestrator.py` |
 | Tool use via prompt (`CALL tool_name key=val`) | Done — used in discussion example |
-| HTTP microservice — task breakdown (port 5001) | Done — `tools/task_breaker_service.py` |
-| HTTP microservice — discussion turn counter (port 5000) | Done — `tools/discussion_length_service.py` |
+| HTTP microservice — task breakdown (port 5001) | Done — `src/tools/task_breaker_service.py` |
+| HTTP microservice — discussion turn counter (port 5000) | Done — `src/tools/discussion_length_service.py` |
 | Actually executing the full project using the recommended model | Not yet |
 | Mid-task model switching if a task runs over budget | Not yet |
 | ML-based expense prediction (the demo project builds this) | Not yet |
@@ -156,19 +153,19 @@ Same `--model` / `--model-size` flags as the task breaker.
 tsena/
 ├── requirements.txt
 ├── README.md
+├── demo/
+│   └── tsena_demo.ipynb            Interactive demo + test suite
 └── src/
     ├── ollama_orchestrator/
     │   ├── orchestrator.py         Ollama REST + CLI wrapper, model auto-detection
-    │   ├── task_breaker.py         Task decomposition, per-task measurement, token streaming
-    │   ├── tools/                  HTTP microservices
-    │   └── examples/               Runnable demos (discussion, tool use, task breaker)
-    ├── tools/
-    │   ├── expense_estimator.py        Main entry point — budget input, model pick, full pipeline
-    │   ├── expense_calculator.py       Earlier prototype
-    │   ├── discussion_length_service.py
-    │   └── task_breaker_service.py
-    └── test/
-        └── tsena_demo.ipynb            Interactive demo + test suite
+    │   └── README.md
+    └── tools/
+        ├── task_breaker.py             Task decomposition, per-task measurement, token streaming
+        ├── expense_estimator.py        Main entry point — budget input, model pick, full pipeline
+        ├── expense_calculator.py       Earlier prototype
+        ├── discussion_length_service.py
+        ├── task_breaker_service.py
+        └── TASK_BREAKER_README.md
 ```
 
 ---
@@ -176,7 +173,7 @@ tsena/
 ## Running the tests
 
 ```bash
-jupyter notebook src/test/tsena_demo.ipynb
+jupyter notebook demo/tsena_demo.ipynb
 ```
 
 Run cells top-to-bottom. Sections 1–2 (parser unit tests) need no Ollama. Sections 3–9 require Ollama with at least one generative model installed.
