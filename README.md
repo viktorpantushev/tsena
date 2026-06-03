@@ -57,7 +57,7 @@ cd tsena
 ## Quick Start
 
 ```bash
-cd src/tools/expense\ estimator
+cd src/tools
 python3 expense_estimator.py
 ```
 
@@ -163,10 +163,8 @@ tsena/
     │   ├── tools/                  HTTP microservices
     │   └── examples/               Runnable demos (discussion, tool use, task breaker)
     └── tools/
-        ├── expense estimator/
-        │   └── expense_estimator.py    Main entry point — budget input, model pick, full pipeline
-        ├── expense calculator/
-        │   └── expense_calculator.py   Earlier prototype
+        ├── expense_estimator.py        Main entry point — budget input, model pick, full pipeline
+        ├── expense_calculator.py       Earlier prototype
         ├── discussion_length_service.py
         └── task_breaker_service.py
     └── test/                       Test suite

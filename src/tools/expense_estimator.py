@@ -11,7 +11,7 @@ An advanced application demonstrating:
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../ollama_orchestrator'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../ollama_orchestrator'))
 
 from task_breaker import (
     break_down_task,
