@@ -7,7 +7,7 @@ It allows other services and orchestrators to request task decomposition
 without needing to call ollama directly.
 
 Usage:
-  python3 ollama_orchestrator/tools/task_breaker_service.py
+  python3 tools/task_breaker_service.py
 
 Then call:
   curl -X POST http://127.0.0.1:5001/break-task \
@@ -18,12 +18,6 @@ Then call:
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 import json
-import sys
-import os
-
-# Add parent directory to path so we can import task_breaker
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from task_breaker import break_down_task, format_task_breakdown
 
 
