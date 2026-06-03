@@ -57,20 +57,10 @@ cd tsena
 ## Quick Start
 
 ```bash
-python3 src/tools/expense_estimator.py
+jupyter notebook demo/tsena_demo.ipynb
 ```
 
-You will be prompted for:
-
-1. **Budget** — your total token spend limit in USD (e.g. `10`)
-2. **Model** — which locally installed model to use for task breakdown (listed by number)
-
-Tsena then:
-
-1. Breaks the project description into subtasks with difficulty ratings and hour estimates using the chosen model
-2. Runs each subtask through the **largest locally installed model**, asking it to write real implementation code — measuring actual `prompt_tokens` and `response_tokens` via the Ollama REST API
-3. Prints a per-task token breakdown and calculates the average tokens per task
-4. Recommends the best cloud model tier (from the catalogue in `LLM_MODELS`) whose projected cost fits within the budget
+Run cells top-to-bottom. Sections 1–2 (parser unit tests) need no Ollama. Sections 3–9 require Ollama with at least one generative model installed.
 
 ---
 
